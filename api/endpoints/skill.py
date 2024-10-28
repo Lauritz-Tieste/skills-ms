@@ -214,6 +214,22 @@ async def list_sub_skills(*, root_skill_id: str, user: User | None = public_auth
         columns=root_skill.sub_tree_columns,
     )
 
+@router.get("/skilltree/subskills/search", responses=responses(SubSkill, SkillNotFoundException))
+@redis_cached("skills", "search_term", "user")
+async def search_sub_skill(*, search_term: str, user: User | None = public_auth) -> Any:
+    """Search for a sub skill by search term in ID or name."""
+
+    sub_skills = [
+        sub_skill.serialize
+        async for sub_skill in await db.stream(select(models.SubSkill))
+        if search_term.lower() in sub_skill.id.lower() or search_term.lower() in sub_skill.name.lower()
+    ]
+
+    if not sub_skills:
+        raise SkillNotFoundException
+
+    return sub_skills
+
 
 @router.post(
     "/skilltree/{root_skill_id}",
