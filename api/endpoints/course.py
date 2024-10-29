@@ -21,6 +21,7 @@ from api.exceptions.course import (
 )
 from api.redis import redis
 from api.schemas.course import Course, CourseSummary, Lecture, NextUnseenResponse, UserCourse
+from api.schemas.view_time import ViewTime, ViewTimeSection, ViewTimeLecture, ViewTimeSubSkill
 from api.schemas.user import User
 from api.services.auth import get_email
 from api.services.courses import COURSES
@@ -305,3 +306,52 @@ async def buy_course(user: User = user_auth, course: Course = get_course) -> Any
     await clear_cache("course_access")
 
     return True
+
+
+@router.get("/courses_viewtime", responses=responses(ViewTime))
+async def get_course_viewtime(user: User = user_auth) -> Any:
+    """
+    Return the total viewtime of all courses.
+
+    *Requirements:* **VERIFIED**
+    """
+
+    completed_lectures: dict[str, set[str]] = {}
+
+    async for lecture in await db.stream(filter_by(models.LectureProgress, user_id=user.id)):
+        completed_lectures.setdefault(lecture.course_id, set()).add(lecture.lecture_id)
+
+    lecture_data = [
+        course.summary(None if completed_lectures is None else completed_lectures.get(course.id, set()))
+        for course in iter(COURSES.values())
+    ]
+
+    sub_skill_reponses = []
+
+    for sub_skill in lecture_data:
+        total_time = 0
+        sections = []
+
+        for section in sub_skill.sections:
+            section_time = 0
+            lectures = []
+
+            for lecture in section.lectures:
+                if lecture.duration > 0 and lecture.completed:
+                    lectures.append(ViewTimeLecture(lecture_name=lecture.title, time=lecture.duration))
+                    section_time += lecture.duration
+
+            if section_time > 0:
+                sections.append(ViewTimeSection(section_name=section.title, total_time=section_time, lectures=lectures))
+                total_time += section_time
+
+        if total_time > 0:
+            sub_skill_reponses.append(
+                ViewTimeSubSkill(
+                    sub_skill_id=sub_skill.id, sub_skill_name=sub_skill.title, total_time=total_time, sections=sections
+                )
+            )
+
+    return ViewTime(
+        total_time=sum([sub_skill.total_time for sub_skill in sub_skill_reponses]), sub_skills=sub_skill_reponses
+    )
