@@ -19,9 +19,10 @@ from api.exceptions.course import (
     NoCourseAccessException,
     NotEnoughCoinsError,
 )
+from api.exceptions.view_time import DataFetchError, UnexpectedDataStructure
 from api.redis import redis
 from api.schemas.course import Course, CourseSummary, Lecture, NextUnseenResponse, UserCourse
-from api.schemas.view_time import ViewTime, ViewTimeSection, ViewTimeLecture, ViewTimeSubSkill
+from api.schemas.view_time import ViewTime, ViewTimeSection, ViewTimeLecture, ViewTimeSubSkill, TotalTime
 from api.schemas.user import User
 from api.services.auth import get_email
 from api.services.courses import COURSES
@@ -30,6 +31,7 @@ from api.settings import settings
 from api.utils.cache import clear_cache, redis_cached
 from api.utils.docs import responses
 from api.utils.email import BOUGHT_COURSE
+import requests
 
 
 router = APIRouter()
@@ -355,3 +357,51 @@ async def get_course_viewtime(user: User = user_auth) -> Any:
     return ViewTime(
         total_time=sum([sub_skill.total_time for sub_skill in sub_skill_reponses]), sub_skills=sub_skill_reponses
     )
+
+@router.get("/tasks_viewtime", responses=responses(TotalTime, DataFetchError, UnexpectedDataStructure))
+async def get_tasks_viewtime(user: User = user_auth) -> Any:
+    """
+    Return the total viewtime of all tasks.
+
+    *Requirements:* **VERIFIED**
+    """
+    url = "https://api.test.bootstrap.academy/challenges/subtasks"  # TODO: Replace by a real URL
+    # headers = {"Authorization": f"Bearer {user.auth_token}"}
+    # headers = {"Authorization": f"Bearer testBearerToken"}
+    headers = {"Authorization": f"Bearer eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3MzAyMzU4MjYsInVpZCI6ImFlYTY4OWI1LWViYWYtNDg5Yy1iMDU0LTNiOTlhNDY1NTU2MSIsInNpZCI6IjI1ZDQ3NjM5LWRjNTAtNGZiYi05M2FkLWY4MmRiZTUyM2E1MCIsInJ0IjoiYmVjZTZhNTc5NjEwMjBiMjcyZDg2YTNmNjZjODc0MjM3NjgxNjUzY2MxYWI0YjU5OGZiMmFhNmU0YmY4NmIxYSIsImRhdGEiOnsiYWRtaW4iOnRydWUsImVtYWlsX3ZlcmlmaWVkIjp0cnVlfX0.8unbpeiD-oW652aVkOLvUMIpDsTDgY-kk84zXjUZSh8"}
+    params = {"solved": "true"}
+
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code != 200:
+        return DataFetchError()
+
+    try:
+        tasks_data = response.json()
+    except ValueError:
+        return DataFetchError()
+
+    if not isinstance(tasks_data, list):
+        return UnexpectedDataStructure()
+
+    total_time = 0
+    for task in tasks_data:
+        task_type = task.get("type")
+        if task_type == "MULTIPLE_CHOICE_QUESTION" or task_type == "MATCHING":
+            total_time += 60  # one minute
+        elif task_type == "CODING_CHALLENGE":
+            total_time += 60 * 30  # 30 minutes
+
+    return TotalTime(total_time=total_time)
+
+
+@router.get("/viewtime", responses=responses(TotalTime))
+async def get_viewtime(user: User = user_auth) -> Any:
+    """
+    Return the total viewtime of all tasks.
+
+    *Requirements:* **VERIFIED**
+    """
+    get_course_viewtime_response = await get_course_viewtime(user)
+    get_tasks_viewtime_response = await get_tasks_viewtime(user)
+
+    return TotalTime(total_time=get_course_viewtime_response.total_time + get_tasks_viewtime_response.total_time)

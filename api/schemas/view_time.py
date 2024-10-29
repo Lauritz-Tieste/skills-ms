@@ -23,3 +23,7 @@ class ViewTimeSubSkill(BaseModel):
 class ViewTime(BaseModel):
     total_time: int
     sub_skills: List[ViewTimeSubSkill]
+
+
+class TotalTime(BaseModel):
+    total_time: int
