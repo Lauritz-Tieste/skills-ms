@@ -36,8 +36,8 @@ class InternalService(Enum):
             headers={"Authorization": self._get_token()},
             event_hooks={"response": [self._handle_error]},
         )
-    
-    def client_external(self, auth_token: str) -> AsyncClient:    
+
+    def client_external(self, auth_token: str) -> AsyncClient:
         return AsyncClient(
             base_url=self.value,
             headers={"Authorization": f"Bearer {auth_token}"},
