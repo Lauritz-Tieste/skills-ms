@@ -4,10 +4,10 @@ from pathlib import Path
 from secrets import token_urlsafe
 from typing import Any, Iterable
 
-from fastapi import APIRouter, Depends, Header, Query, Response, Request
+from fastapi import APIRouter, Depends, Header, Query, Request, Response
 
 from api import models
-from api.auth import public_auth, require_verified_email, user_auth, get_token
+from api.auth import get_token, public_auth, require_verified_email, user_auth
 from api.database import db, filter_by
 from api.exceptions.auth import user_responses, verified_responses
 from api.exceptions.course import (
@@ -22,16 +22,16 @@ from api.exceptions.course import (
 from api.exceptions.view_time import DataFetchError
 from api.redis import redis
 from api.schemas.course import Course, CourseSummary, Lecture, NextUnseenResponse, UserCourse
-from api.schemas.view_time import ViewTime, ViewTimeSection, ViewTimeLecture, ViewTimeSubSkill, TotalTime
 from api.schemas.user import User
+from api.schemas.view_time import TotalTime, ViewTime, ViewTimeLecture, ViewTimeSection, ViewTimeSubSkill
 from api.services.auth import get_email
+from api.services.challenges import challenge_subtasks
 from api.services.courses import COURSES
 from api.services.shop import has_premium, spend_coins
 from api.settings import settings
 from api.utils.cache import clear_cache, redis_cached
 from api.utils.docs import responses
 from api.utils.email import BOUGHT_COURSE
-from api.services.challenges import challenge_subtasks
 
 
 router = APIRouter()
