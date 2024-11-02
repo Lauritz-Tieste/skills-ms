@@ -11,6 +11,7 @@ from api.exceptions.auth import admin_responses
 from api.exceptions.course import CourseNotFoundException
 from api.exceptions.skill import CycleInSkillTreeException, SkillAlreadyExistsException, SkillNotFoundException
 from api.schemas.course import Course
+from api.schemas.search import SearchResults
 from api.schemas.skill import (
     CreateRootSkill,
     CreateSubSkill,
@@ -215,21 +216,37 @@ async def list_sub_skills(*, root_skill_id: str, user: User | None = public_auth
     )
 
 
-@router.get("/skilltree/subskills/search", responses=responses(SubSkill, SkillNotFoundException))
+@router.get("/skilltree/subskills/search", responses=responses(SearchResults))
 @redis_cached("skills", "search_term", "user")
 async def search_sub_skill(*, search_term: str, user: User | None = public_auth) -> Any:
-    """Search for a sub skill by search term in ID or name."""
+    """Search for sub skills, root skills, and courses."""
 
     sub_skills = [
         sub_skill.serialize
-        async for sub_skill in await db.stream(select(models.SubSkill))
-        if search_term.lower() in sub_skill.id.lower() or search_term.lower() in sub_skill.name.lower()
+        async for sub_skill in await db.stream(
+            select(models.SubSkill).where(
+                (models.SubSkill.id.ilike(f"%{search_term}%")) | (models.SubSkill.name.ilike(f"%{search_term}%"))
+            )
+        )
     ]
 
-    if not sub_skills:
-        raise SkillNotFoundException
+    root_skills = [
+        root_skill.serialize
+        async for root_skill in await db.stream(
+            select(models.RootSkill).where(
+                (models.RootSkill.id.ilike(f"%{search_term}%")) | (models.RootSkill.name.ilike(f"%{search_term}%"))
+            )
+        )
+    ]
 
-    return sub_skills
+    courses = [
+        course.serialize
+        async for course in await db.stream(
+            select(models.SkillCourse).where(models.SkillCourse.course_id.ilike(f"%{search_term}%"))
+        )
+    ]
+
+    return SearchResults(root_skills=root_skills, sub_skills=sub_skills, courses=courses)
 
 
 @router.post(
