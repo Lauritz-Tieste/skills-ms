@@ -216,9 +216,9 @@ async def list_sub_skills(*, root_skill_id: str, user: User | None = public_auth
     )
 
 
-@router.get("/skilltree/subskills/search", responses=responses(SearchResults))
-@redis_cached("skills", "search_term", "user")
-async def search_sub_skill(*, search_term: str, user: User | None = public_auth) -> Any:
+@router.get("/search", responses=responses(SearchResults))
+@redis_cached("skills", "search_term")
+async def search_sub_skill(*, search_term: str) -> Any:
     """Search for sub skills, root skills, and courses."""
 
     sub_skills = [
