@@ -1,6 +1,6 @@
 """Endpoints related to the skilltree"""
 
-from typing import Any, cast
+from typing import Any, Iterable, cast
 
 from fastapi import APIRouter, Depends
 
@@ -220,30 +220,29 @@ async def list_sub_skills(*, root_skill_id: str, user: User | None = public_auth
 @redis_cached("skills", "search_term")
 async def search_sub_skill(*, search_term: str) -> Any:
     """Search for sub skills, root skills, and courses."""
+    search_term = search_term.strip().lower()
 
     sub_skills = [
         sub_skill.serialize
         async for sub_skill in await db.stream(
-            select(models.SubSkill).where(
-                (models.SubSkill.id.ilike(f"%{search_term}%")) | (models.SubSkill.name.ilike(f"%{search_term}%"))
-            )
+            select(models.SubSkill).where(models.SubSkill.name.ilike(f"%{search_term}%"))
         )
     ]
 
     root_skills = [
         root_skill.serialize
         async for root_skill in await db.stream(
-            select(models.RootSkill).where(
-                (models.RootSkill.id.ilike(f"%{search_term}%")) | (models.RootSkill.name.ilike(f"%{search_term}%"))
-            )
+            select(models.RootSkill).where(models.RootSkill.name.ilike(f"%{search_term}%"))
         )
     ]
 
+    out: Iterable[Course] = (course for course in iter(COURSES.values()) if search_term in course.title.lower())
+
+    completed_lectures: dict[str, set[str]] | None = None
+
     courses = [
-        course.serialize
-        async for course in await db.stream(
-            select(models.SkillCourse).where(models.SkillCourse.course_id.ilike(f"%{search_term}%"))
-        )
+        course.summary(None if completed_lectures is None else completed_lectures.get(course.id, set()))
+        for course in out
     ]
 
     return SearchResults(root_skills=root_skills, sub_skills=sub_skills, courses=courses)
